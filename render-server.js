@@ -10,9 +10,7 @@ app.use(express.urlencoded({ extended: true }));
 // CORS設定（制限付き）
 app.use((req, res, next) => {
     const allowedOrigins = [
-        'https://your-username.github.io', // GitHub Pages
-        'http://localhost:8000',
-        'file://'  // ローカルファイル
+        'https://y-redhat.github.io/testserver-p/', // GitHub Pages
     ];
     
     const origin = req.headers.origin;
