@@ -1,162 +1,119 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>暗号化プロキシ</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>暗号化プロキシブラウザ</title>
     <style>
-        body { background: #000; color: #0f0; font-family: monospace; margin: 20px; }
-        input { width: 60%; padding: 10px; background: #111; color: #0f0; border: 1px solid #0f0; }
-        button { padding: 10px 20px; background: #0f0; color: #000; border: none; cursor: pointer; margin: 5px; }
-        iframe { width: 100%; height: 70vh; border: 1px solid #0f0; margin-top: 20px; }
-        .status { padding: 10px; background: #111; margin: 10px 0; }
-        .mode-btn { background: #222; border: 1px solid #444; color: #ccc; }
-        .mode-btn.active { background: #0f0; color: #000; border-color: #0f0; }
+        body { background: #0a0a0a; color: #00ff88; font-family: 'Courier New', monospace; margin: 20px; }
+        input { width: 70%; padding: 12px; background: #111; color: #fff; border: 2px solid #00ff88; border-radius: 5px; }
+        button { padding: 12px 24px; background: #8a2be2; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #9a3bf2; }
+        iframe { width: 100%; height: 70vh; border: 2px solid #333; border-radius: 5px; margin-top: 20px; }
+        .status { padding: 10px; background: #111; border-left: 4px solid #00ff88; margin: 10px 0; }
+        .server-info { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 8px 12px; border-radius: 5px; font-size: 12px; }
     </style>
 </head>
 <body>
-    <h1>🔐 暗号化プロキシ</h1>
+    <div class="server-info" id="serverInfo">サーバー: 接続中...</div>
+    
+    <h1>🔐 暗号化プロキシブラウザ</h1>
+    <p>Renderサーバー: <code>proxy-server-ckjw.onrender.com</code></p>
     
     <div>
-        <input id="url" placeholder="https://example.com" value="https://www.google.com">
-        <button onclick="loadPage()">ロード</button>
+        <input type="text" id="urlInput" placeholder="https://example.com" value="https://www.google.com">
+        <button onclick="loadPage()">暗号化して読み込み</button>
     </div>
     
-    <div style="margin: 10px 0;">
-        <button class="mode-btn active" onclick="setMode('aes')">🔐 AES</button>
-        <button class="mode-btn" onclick="setMode('xor')">🔑 XOR</button>
-        <button class="mode-btn" onclick="setMode('base64')">📦 Base64</button>
+    <div class="status" id="status">準備完了。URLを入力してください。</div>
+    
+    <iframe id="browserFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+    
+    <div style="margin-top: 20px;">
+        <h3>クイックアクセス:</h3>
+        <button onclick="quickLoad('https://www.google.com')" style="margin: 3px;">Google</button>
+        <button onclick="quickLoad('https://www.youtube.com')" style="margin: 3px;">YouTube</button>
+        <button onclick="quickLoad('https://github.com')" style="margin: 3px;">GitHub</button>
+        <button onclick="quickLoad('https://wikipedia.org')" style="margin: 3px;">Wikipedia</button>
+        <button onclick="quickLoad('https://stackoverflow.com')" style="margin: 3px;">StackOverflow</button>
     </div>
     
-    <div class="status" id="status">準備完了</div>
-    <iframe id="frame"></iframe>
-    
-    <div style="margin-top: 20px; font-size: 12px; color: #666;">
-        暗号化モード: <span id="modeText">AES-256</span> | サーバー: <span id="serverStatus">接続中...</span>
-    </div>
-
     <script>
+        // サーバーURL - あなたのRenderサーバー
+        const SERVER_URL = 'https://proxy-server-ckjw.onrender.com';
+        
         // 暗号化クラス
         class Encryptor {
             constructor() {
-                this.mode = 'aes';
-                this.key = this.generateKey();
-                this.server = 'https://proxy-server-ckjw.onrender.com';
+                this.secretKey = 'y-redhat-testserver-2024';
             }
             
-            generateKey() {
-                // 32バイトのキーを生成
-                const array = new Uint8Array(32);
-                crypto.getRandomValues(array);
-                return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
-            }
-            
-            // AES暗号化
-            async encryptAES(text) {
-                const encoder = new TextEncoder();
-                const data = encoder.encode(text);
+            // カスタム暗号化関数
+            encrypt(text) {
+                // 複合暗号化: Base64 + 逆順 + カスタムシフト
+                let encrypted = btoa(text);
                 
-                const keyMaterial = await crypto.subtle.importKey(
-                    'raw',
-                    encoder.encode(this.key.substring(0, 32)),
-                    { name: 'AES-CBC' },
-                    false,
-                    ['encrypt']
-                );
+                // 逆順
+                encrypted = encrypted.split('').reverse().join('');
                 
-                const iv = crypto.getRandomValues(new Uint8Array(16));
-                const encrypted = await crypto.subtle.encrypt(
-                    { name: 'AES-CBC', iv: iv },
-                    keyMaterial,
-                    data
-                );
-                
-                const result = new Uint8Array(iv.length + encrypted.byteLength);
-                result.set(iv, 0);
-                result.set(new Uint8Array(encrypted), iv.length);
-                
-                return btoa(String.fromCharCode(...result));
-            }
-            
-            // XOR暗号化（簡易）
-            encryptXOR(text) {
-                let result = '';
-                const key = this.key;
-                for (let i = 0; i < text.length; i++) {
-                    const charCode = text.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-                    result += String.fromCharCode(charCode);
+                // 文字シフト
+                let shifted = '';
+                for (let i = 0; i < encrypted.length; i++) {
+                    const charCode = encrypted.charCodeAt(i);
+                    // シフト量をキーから計算
+                    const shift = this.secretKey.charCodeAt(i % this.secretKey.length) % 10;
+                    shifted += String.fromCharCode(charCode + shift);
                 }
-                return btoa(result);
+                
+                // 再度Base64
+                return btoa(shifted);
             }
             
-            // Base64多重暗号化
-            encryptBase64(text) {
-                let encoded = btoa(text);
-                // 逆順 + 回転
-                encoded = encoded.split('').reverse().join('');
-                encoded = btoa(encoded);
-                return encoded;
-            }
-            
-            async encrypt(text) {
-                switch(this.mode) {
-                    case 'aes':
-                        return await this.encryptAES(text);
-                    case 'xor':
-                        return this.encryptXOR(text);
-                    case 'base64':
-                        return this.encryptBase64(text);
-                    default:
-                        return btoa(text);
-                }
+            // エンコードして送信用オブジェクト作成
+            createRequest(url) {
+                const encrypted = this.encrypt(url);
+                const timestamp = Date.now();
+                const requestId = Math.random().toString(36).substring(2);
+                
+                return {
+                    req: 'fetch',
+                    data: encrypted,
+                    ts: timestamp,
+                    id: requestId,
+                    v: '1.0'
+                };
             }
         }
         
-        // メイン処理
         const encryptor = new Encryptor();
         
-        function setMode(mode) {
-            encryptor.mode = mode;
-            document.querySelectorAll('.mode-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            
-            const modeNames = {
-                'aes': 'AES-256暗号化',
-                'xor': 'XOR暗号化',
-                'base64': 'Base64多重暗号化'
-            };
-            document.getElementById('modeText').textContent = modeNames[mode];
-            showStatus(`暗号化モード: ${modeNames[mode]}`);
-        }
-        
+        // メイン関数
         async function loadPage() {
-            let url = document.getElementById('url').value.trim();
-            if (!url) return;
+            let url = document.getElementById('urlInput').value.trim();
+            if (!url) {
+                showStatus('URLを入力してください', 'error');
+                return;
+            }
             
-            if (!url.startsWith('http')) {
+            // URLフォーマット補正
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
                 url = 'https://' + url;
             }
             
-            showStatus('暗号化中...');
+            showStatus('暗号化中...', 'info');
             
             try {
                 // 1. URLを暗号化
-                const encryptedUrl = await encryptor.encrypt(url);
+                const requestData = encryptor.createRequest(url);
                 
-                // 2. 暗号化データを送信
-                const response = await fetch(`${encryptor.server}/api`, {
+                // 2. Renderサーバーにリクエスト
+                const response = await fetch(SERVER_URL + '/api', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Request-Type': 'data-fetch', // 偽装ヘッダー
-                        'X-API-Version': '1.0'
+                        'X-Client': 'encrypted-browser'
                     },
-                    body: JSON.stringify({
-                        action: 'get_content',
-                        data: encryptedUrl,
-                        mode: encryptor.mode,
-                        timestamp: Date.now()
-                    })
+                    body: JSON.stringify(requestData)
                 });
                 
                 if (!response.ok) {
@@ -169,85 +126,100 @@
                     throw new Error(result.error);
                 }
                 
-                // 3. レスポンスを表示
-                const frame = document.getElementById('frame');
+                // 3. 結果を表示
+                const frame = document.getElementById('browserFrame');
                 
-                if (result.html) {
-                    // 通常のHTMLレスポンス
-                    frame.srcdoc = `
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <base href="${url}">
-                            <style>
-                                body { margin: 20px; }
-                                * { max-width: 100%; }
-                            </style>
-                        </head>
-                        <body>
-                            ${result.html}
-                            <div style="position: fixed; bottom: 10px; right: 10px; 
-                                       background: rgba(0,0,0,0.7); color: #0f0; 
-                                       padding: 5px 10px; border-radius: 5px; font-size: 12px;">
-                                🔐 暗号化プロキシ経由
-                            </div>
-                        </body>
-                        </html>
-                    `;
-                } else if (result.iframe) {
-                    // iframe埋め込み
-                    frame.srcdoc = result.iframe;
-                }
+                // ベースURLを設定
+                const baseTag = `<base href="${url}">`;
                 
-                showStatus(`✅ 読み込み成功: ${new URL(url).hostname}`);
-                document.getElementById('serverStatus').textContent = '接続済み';
+                // CSSで制限を追加
+                const restrictCSS = `
+                    <style>
+                        iframe, frame, frameset {
+                            display: none !important;
+                        }
+                        [onload*="window.location"],
+                        [href*="javascript:"],
+                        [onclick*="location.href"] {
+                            pointer-events: none !important;
+                            opacity: 0.5 !important;
+                        }
+                    </style>
+                `;
                 
-            } catch(error) {
-                showStatus(`❌ エラー: ${error.message}`);
-                document.getElementById('serverStatus').textContent = 'エラー';
+                frame.srcdoc = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <meta charset="utf-8">
+                        ${baseTag}
+                        ${restrictCSS}
+                    </head>
+                    <body>
+                        ${result.html || 'コンテンツがありません'}
+                        <div style="position: fixed; bottom: 10px; right: 10px; 
+                                   background: rgba(0,0,0,0.8); color: #00ff88; 
+                                   padding: 8px 12px; border-radius: 5px; font-size: 12px;">
+                            🔐 暗号化プロキシ経由
+                        </div>
+                    </body>
+                    </html>
+                `;
+                
+                showStatus(`✅ 読み込み成功: ${new URL(url).hostname}`, 'success');
+                updateServerInfo('接続済み');
+                
+            } catch (error) {
+                showStatus(`❌ エラー: ${error.message}`, 'error');
+                updateServerInfo('エラー');
             }
         }
         
-        function showStatus(message) {
-            document.getElementById('status').textContent = message;
+        // ヘルパー関数
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            
+            const colors = {
+                info: '#00d4ff',
+                success: '#00ff88',
+                error: '#ff4757',
+                warning: '#ffa502'
+            };
+            
+            statusDiv.style.borderLeftColor = colors[type] || colors.info;
         }
         
-        // テスト接続
-        async function testConnection() {
-            try {
-                const response = await fetch(`${encryptor.server}/health`);
-                if (response.ok) {
-                    document.getElementById('serverStatus').textContent = 'オンライン';
-                }
-            } catch(e) {
-                document.getElementById('serverStatus').textContent = 'オフライン';
-            }
+        function updateServerInfo(message) {
+            document.getElementById('serverInfo').textContent = `サーバー: ${message}`;
         }
         
-        // 初期化
-        document.getElementById('url').onkeypress = e => e.key === 'Enter' && loadPage();
-        setTimeout(testConnection, 1000);
-        
-        // クイックリンク
-        function quickLoad(site) {
-            document.getElementById('url').value = site;
+        function quickLoad(url) {
+            document.getElementById('urlInput').value = url;
             loadPage();
         }
         
-        // キーボードショートカット
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'l') {
-                document.getElementById('url').focus();
-                document.getElementById('url').select();
-            }
+        // 初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            // Enterキーで実行
+            document.getElementById('urlInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    loadPage();
+                }
+            });
+            
+            // サーバー接続テスト
+            fetch(SERVER_URL + '/health')
+                .then(response => response.json())
+                .then(data => {
+                    updateServerInfo('オンライン ✓');
+                    showStatus('サーバー接続完了', 'success');
+                })
+                .catch(error => {
+                    updateServerInfo('オフライン ✗');
+                    showStatus('サーバーに接続できません', 'error');
+                });
         });
     </script>
-    
-    <div style="margin-top: 20px;">
-        <button onclick="quickLoad('https://www.google.com')" style="font-size: 12px;">Google</button>
-        <button onclick="quickLoad('https://www.youtube.com')" style="font-size: 12px;">YouTube</button>
-        <button onclick="quickLoad('https://github.com')" style="font-size: 12px;">GitHub</button>
-        <button onclick="quickLoad('https://wikipedia.org')" style="font-size: 12px;">Wikipedia</button>
-    </div>
 </body>
 </html>
