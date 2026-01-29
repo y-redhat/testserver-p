@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head><title>Proxy Browser</title>
+<style>body{background:#000;color:#0f0;font-family:monospace;margin:20px;}
+input{width:70%;padding:10px;background:#111;color:#0f0;border:1px solid #0f0;}
+button{padding:10px 20px;background:#0f0;color:#000;border:none;cursor:pointer;}
+iframe{width:100%;height:70vh;border:1px solid #0f0;margin-top:20px;}
+.status{padding:10px;background:#111;margin:10px 0;}</style>
+</head>
+<body>
+<h1>🚀 Proxy Browser</h1>
+<input id="url" placeholder="https://example.com">
+<button onclick="load()">Load</button>
+<div class="status" id="status">Ready</div>
+<iframe id="frame" sandbox="allow-scripts"></iframe>
+<script>
+// RenderサーバーのURL - デプロイ後に設定
+const SERVER_URL = 'https://your-render-app.onrender.com/proxy';
+
+async function load() {
+    const url = document.getElementById('url').value;
+    if(!url) return;
+    
+    document.getElementById('status').textContent = 'Loading...';
+    
+    try {
+        // Renderサーバー経由でサイトを取得
+        const response = await fetch(`${SERVER_URL}?url=${encodeURIComponent(url)}`);
+        const html = await response.text();
+        
+        // iframeに表示
+        const frame = document.getElementById('frame');
+        frame.srcdoc = `
+            <!DOCTYPE html>
+            <html>
+            <head><base href="${url}"></head>
+            <body>${html}</body>
+            </html>
+        `;
+        
+        document.getElementById('status').textContent = 'Loaded successfully';
+    } catch(error) {
+        document.getElementById('status').textContent = 'Error: ' + error.message;
+    }
+}
+
+// Enterキー対応
+document.getElementById('url').onkeypress = e => e.key === 'Enter' && load();
+</script>
+</body>
+</html>
